@@ -1,11 +1,23 @@
 # Importing modules
 from regression import Regression
+import hypothesis_testing
 import csv
 
 # Testing
 import pandas as pd
 import statsmodels.formula.api as sm
 import timeit
+
+
+test_statistic = 2.571
+t = hypothesis_testing.t(5)
+print(t.test(test_statistic))
+
+test_statistic = 1.96
+Z = hypothesis_testing.Z()
+print(Z.test(test_statistic))
+
+test_statistic = 
 
 path = "/Users/martin/Downloads/Econometrics/Housing.csv"
 data = []

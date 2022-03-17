@@ -100,7 +100,7 @@ class Regression:
         self.beta_hat_fwl_1 = self.X1TM2X1_inverse.multiply(self.X1TM2).multiply(self.y)
         self.beta_hat_fwl_2 = self.X2TM1X2_inverse.multiply(self.X2TM1).multiply(self.y)
         self.e_hat = self.y.subtract(self.X1.multiply(self.beta_hat_fwl_1)).subtract(self.X2.multiply(self.beta_hat_fwl_2))
-        if self.X1.nrows > (self.X1.ncols + self.X2.nrows):
+        if self.X1.nrows > (self.X1.ncols + self.X2.ncols):
             self.sigma_squared_hat = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X1.nrows - self.X1.ncols - self.X2.ncols).data[0][0]
             self.var_hat_1 = self.X1TM2X1_inverse.scale(self.sigma_squared_hat)
             self.var_hat_2 = self.X2TM1X2_inverse.scale(self.sigma_squared_hat)
