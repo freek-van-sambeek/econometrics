@@ -23,12 +23,9 @@ class Matrix:
         if self.nrows != self.ncols:
             raise ValueError("Number of rows has to be equal to the number of columns to invert a matrix.")
         data = self.data
+        identity_matrix_data = self.identity_matrix(self.nrows).data
         for i in range(self.nrows):
-            for j in range(self.nrows):
-                if i == j:
-                    data[i].append(1)
-                else:
-                    data[i].append(0)
+            data[i] += identity_matrix_data[i]
         return Matrix(data)
 
     @staticmethod
@@ -58,6 +55,18 @@ class Matrix:
         for i in range(length):
             sum += a[i] * b[i]
         return sum
+
+    @staticmethod
+    def identity_matrix(n):
+        data = []
+        for i in range(n):
+            data.append([])
+            for j in range(n):
+                if i == j:
+                    data[i].append(1)
+                else:
+                    data[i].append(0)
+        return Matrix(data)
 
     def add_sub(self, B, add=True):
         if self.ncols != B.ncols or self.nrows != B.nrows:
@@ -98,7 +107,7 @@ class Matrix:
                 result[i].append(self.dotproduct(A[i], B_T[j]))
         return Matrix(result)
 
-    def invert(self):
+    def inverse(self):
         system = self.system()
         data = system.data
         for j in range(self.nrows):
