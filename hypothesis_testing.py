@@ -1,5 +1,5 @@
-pi = 3.1415
-e = 2.1783
+pi = 3.14159265358979
+e = 2.71828182845904
 
 
 def factorial(n):
@@ -20,22 +20,27 @@ def gamma(z):
     return lower + (upper - lower) * (z - n) ** 2
 
 
+def beta(alfa, beta):
+    return (gamma(alfa) * gamma(beta)) / gamma(alfa + beta)
+
+
 class t:
     def __init__(self, degrees_freedom):
         self.degrees_freedom = degrees_freedom
 
     def pdf(self, x):
         nu = self.degrees_freedom
-        return gamma((nu + 1) / 2) / ((pi * nu) ** (1 / 2) * gamma(nu / 2)) * (1 + (x ** 2) / nu) ** (-(nu + 1) / 2)
+        return gamma((nu + 1) / 2) / ((pi * nu) ** (1 / 2) * gamma(nu / 2)) * (1 + (x ** 2) / nu) ** (-1 * (nu + 1) / 2)
 
     def test(self, test_statistic, right=True, steps=1000):
         area = 0
         sign = 1
+        step_size = 0.01
         if not right:
             sign = -1
         for step in range(steps):
-            x = test_statistic + sign * step
-            area += self.pdf(x)
+            x = test_statistic + sign * (step + 0.5) * step_size
+            area += self.pdf(x) * step_size
         return area
 
 
@@ -44,33 +49,34 @@ class Z:
         pass
 
     def pdf(self, x):
-        mu = 0
-        sd = 1
-        return 1 / (2 * (pi * sd)) ** (1/2) * e ** (-(x - mu) / sd)
+        return (e ** ((-1 * (x ** 2)) / 2)) / ((2 * pi) ** (1/2))
 
     def test(self, test_statistic, right=True, steps=1000):
         area = 0
         sign = 1
+        step_size = 0.01
         if not right:
             sign = -1
         for step in range(steps):
-            x = test_statistic + sign * step
-            area += self.pdf(x)
+            x = test_statistic + sign * (step + 0.5) * step_size
+            area += self.pdf(x) * step_size
         return area
 
 
-class Chi_squared:
+class ChiSquared:
     def __init__(self, degrees_freedom):
         self.degrees_freedom = degrees_freedom
 
     def pdf(self, x):
-        return (Z.pdf(x) ** 2) * self.degrees_freedom
+        k = self.degrees_freedom
+        return ((x ** (k / 2 - 1)) * (e ** ((-1 * x) / 2))) / ((2 ** (k / 2)) * gamma(k / 2))
 
     def test(self, test_statistic, steps=1000):
         area = 0
+        step_size = 0.01
         for step in range(steps):
-            x = test_statistic + step
-            area += self.pdf(x)
+            x = test_statistic + (step + 0.5) * step_size
+            area += self.pdf(x) * step_size
         return area
 
 
@@ -78,15 +84,16 @@ class F:
     def __init__(self, degrees_freedom1, degrees_freedom2):
         self.degrees_freedom1 = degrees_freedom1
         self.degrees_freedom2 = degrees_freedom2
-        self.Chi_squared1 = Chi_squared(degrees_freedom1)
-        self.Chi_squared2 = Chi_squared(degrees_freedom2)
 
     def pdf(self, x):
-        return (self.Chi_squared1.pdf(x) / self.degrees_freedom1) / (self.Chi_squared2.pdf(x) / self.degrees_freedom2)
+        d1 = self.degrees_freedom1
+        d2 = self.degrees_freedom2
+        return ((((d1 * x) ** d1 * d2 ** d2) / ((d1 * x + d2) ** (d1 + d2))) ** (1 / 2)) / (x * beta(d1 / 2, d2 / 2))
 
     def test(self, test_statistic, steps=1000):
         area = 0
+        step_size = 0.01
         for step in range(steps):
-            x = test_statistic + step
-            area += self.pdf(x)
+            x = test_statistic + (step + 0.5) * step_size
+            area += self.pdf(x) * step_size
         return area
