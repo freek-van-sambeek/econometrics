@@ -13,7 +13,7 @@ def gamma(z):
     if z <= 0:
         raise ValueError("The gamma function is only defined for strictly positive numbers.")
     if z < 1:
-        return 1/z
+        return 1 / z
     n = int(z)
     lower = factorial(n - 1)
     upper = lower * n

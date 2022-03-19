@@ -1,9 +1,9 @@
 from matrix import Matrix
-
+from hypothesis_testing import t, Z, ChiSquared, F
 
 # Options to functions
 class Regression:
-    def __init__(self, data, header=True, partition=None):
+    def __init__(self, data, header=True, partition=None, restriction=False):
         self.partition = partition
 
         self.y = []
@@ -16,7 +16,27 @@ class Regression:
             self.beta_hat_ols = None
 
             self.var_hat = None
-        else:
+
+        if restriction:
+            self.J = None
+            self.R = None
+            self.RT = None
+            self.c = None
+            self.XTX_inverseRT = None
+            self.RXTX_inverseRT_inverse = None
+            self.D = None
+            self.XD = None
+            self.XDT = None
+
+            self.e_hatTe_hat = None
+            self.dTRXTX_inverseRT_inversed = None
+            self.beta_star = None
+            self.test_stat = None
+
+            self.F = F()
+            self.p_value = None
+
+        if partition:
             self.X1 = []
             self.X2 = []
             self.X1T = None
@@ -35,7 +55,7 @@ class Regression:
             self.var_hat_2 = None
 
         self.e_hat = None
-        self.sigma_squared_hat = None
+        self.s_squared = None
 
         self.labels = []
         self.nrows = len(data)
@@ -80,11 +100,32 @@ class Regression:
         self.beta_hat_ols = self.XTX_inverse.multiply(self.XT).multiply(self.y)
         self.e_hat = self.y.subtract(self.X.multiply(self.beta_hat_ols))
         if self.X.nrows > self.X.ncols:
-            self.sigma_squared_hat = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X.nrows - self.X.ncols).data[0][0]
-            self.var_hat = self.XTX_inverse.scale(self.sigma_squared_hat)
+            self.s_squared = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X.nrows - self.X.ncols).data[0][0]
+            self.var_hat = self.XTX_inverse.scale(self.s_squared)
         else:
             raise ValueError("Please supply data which has more rows than columns, otherwise inference will not be possible.")
-        return self.beta_hat_ols
+        return {"Beta_hat_OLS": self.beta_hat_ols}
+
+    def restricted_ols(self, R, c):
+        self.J = len(R)
+        if len(R[0]) != self.X.ncols or self.J != len(c):
+            raise ValueError("Please supply a valid restriction matrix and constant vector.")
+        if not self.beta_hat_ols:
+            self.ols()
+        self.R = Matrix(R)
+        self.RT = self.R.transpose()
+        self.c = Matrix(c)
+        self.XTX_inverseRT = self.XTX_inverse.multiply(self.RT)
+        self.RXTX_inverseRT_inverse = self.R.multiply(self.XTX_inverseRT).inverse()
+        self.D = self.XTX_inverseRT.multiply(self.RXTX_inverseRT_inverse.multiply((self.R.multiply(self.beta_hat_ols)).subtract(self.c)))
+        self.XD = self.X.multiply(self.D)
+        self.XDT = self.XD.transpose()
+        self.e_hatTe_hat = self.s_squared.scale(self.X.nrows - self.X.ncols)
+        self.dTRXTX_inverseRT_inversed = self.e_hatTe_hat.add(self.XDT.multiply(self.XD))
+        self.beta_star = self.beta_hat_ols.subtract(self.D)
+        self.test_stat = self.dTRXTX_inverseRT_inversed.scale((self.X.nrows - self.X.ncols) / (self.J * self.e_hatTe_hat.data[0][0]))
+        self.p_value = self.F.test(self.test_stat)
+        return {"Beta_star": self.beta_star, "p-value": self.p_value}
 
     def partitioned_ols(self):
         if not self.partition:
@@ -101,9 +142,29 @@ class Regression:
         self.beta_hat_fwl_2 = self.X2TM1X2_inverse.multiply(self.X2TM1).multiply(self.y)
         self.e_hat = self.y.subtract(self.X1.multiply(self.beta_hat_fwl_1)).subtract(self.X2.multiply(self.beta_hat_fwl_2))
         if self.X1.nrows > (self.X1.ncols + self.X2.ncols):
-            self.sigma_squared_hat = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X1.nrows - self.X1.ncols - self.X2.ncols).data[0][0]
-            self.var_hat_1 = self.X1TM2X1_inverse.scale(self.sigma_squared_hat)
-            self.var_hat_2 = self.X2TM1X2_inverse.scale(self.sigma_squared_hat)
+            self.s_squared = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X1.nrows - self.X1.ncols - self.X2.ncols).data[0][0]
+            self.var_hat_1 = self.X1TM2X1_inverse.scale(self.s_squared)
+            self.var_hat_2 = self.X2TM1X2_inverse.scale(self.s_squared)
         else:
             raise ValueError("Please supply data which has more rows than columns, otherwise inference will not be possible.")
-        return [self.beta_hat_fwl_1, self.beta_hat_fwl_2]
+        return {"Beta_hat_FWL_1": self.beta_hat_fwl_1, "Beta_hat_FWL_2": self.beta_hat_fwl_2}
+
+    def t_test(self, beta_hat, var_hat, degrees_of_freedom, mu_0=0):
+        if not (self.beta_hat_ols or self.beta_hat_fwl_1 or self.beta_hat_fwl_2):
+            self.ols()
+        p_values = []
+        students_t = t(degrees_of_freedom)
+        var_hat_data = var_hat.data
+        for i in range(len(beta_hat)):
+            p_values.append(students_t.test((beta_hat[i] - mu_0) / var_hat_data[i][i] ** (1 / 2)) * 2)
+        return {"p-values": p_values}
+
+    def z_test(self, beta_hat, var_hat, mu_0=0):
+        if not (self.beta_hat_ols or self.beta_hat_fwl_1 or self.beta_hat_fwl_2):
+            self.ols()
+        p_values = []
+        standard_normal = Z()
+        var_hat_data = var_hat.data
+        for i in range(len(beta_hat)):
+            p_values.append(standard_normal.test((beta_hat[i] - mu_0) / var_hat_data[i][i] ** (1 / 2)) * 2)
+        return {"p-values": p_values}

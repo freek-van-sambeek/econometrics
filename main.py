@@ -21,9 +21,9 @@ import timeit
 # Chi_squared = hypothesis_testing.ChiSquared(degrees_freedom=5)
 # print(Chi_squared.test(test_statistic))
 
-test_statistic = 3.63
-F = hypothesis_testing.F(degrees_freedom1=2, degrees_freedom2=16)
-print(F.test(test_statistic))
+# test_statistic = 3.63
+# F = hypothesis_testing.F(degrees_freedom1=2, degrees_freedom2=16)
+# print(F.test(test_statistic))
 
 # path = "/Users/martin/Downloads/Econometrics/Housing.csv"
 # data = []
