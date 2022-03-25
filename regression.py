@@ -4,7 +4,7 @@ from math import log
 
 # Options to functions
 class Regression:
-    def __init__(self, data, header=True, partition=None, restriction=False, intercept=True):
+    def __init__(self, data, header=True, partition=None, gls=False, restriction=False, intercept=True):
         self.partition = partition
 
         self.y = []
@@ -54,6 +54,20 @@ class Regression:
 
             self.var_hat_1 = None
             self.var_hat_2 = None
+
+        if gls:
+            self.Omega_hat = None
+            self.Omega_hat_inverse = None
+
+        if Z:
+            self.Z = Matrix(Z)
+            self.ZT = None
+            self.ZTX = None
+            self.ZTX_inverse = None
+            self.beta_hat_iv = None
+            self.e_hat_iv = None
+            self.s_squared_iv = None
+            self.var_hat_iv = None
 
         self.e_hat = None
         self.s_squared = None
@@ -113,6 +127,28 @@ class Regression:
             raise ValueError("Please supply data which has more rows than columns, otherwise inference will not be possible.")
         return {"Beta_hat_OLS": self.beta_hat_ols}
 
+    def partitioned_ols(self):
+        if not self.partition:
+            return self.ols()
+        self.X1T = self.X1.transpose()
+        self.X2T = self.X2.transpose()
+        self.M1 = Matrix.identity_matrix(self.X1.nrows).subtract(self.X1.multiply((self.X1T.multiply(self.X1)).inverse()).multiply(self.X1T))
+        self.M2 = Matrix.identity_matrix(self.X2.nrows).subtract(self.X2.multiply((self.X2T.multiply(self.X2)).inverse()).multiply(self.X2T))
+        self.X1TM2 = self.X1T.multiply(self.M2)
+        self.X2TM1 = self.X2T.multiply(self.M1)
+        self.X1TM2X1_inverse = (self.X1TM2.multiply(self.X1)).inverse()
+        self.X2TM1X2_inverse = (self.X2TM1.multiply(self.X2)).inverse()
+        self.beta_hat_fwl_1 = self.X1TM2X1_inverse.multiply(self.X1TM2).multiply(self.y)
+        self.beta_hat_fwl_2 = self.X2TM1X2_inverse.multiply(self.X2TM1).multiply(self.y)
+        self.e_hat = self.y.subtract(self.X1.multiply(self.beta_hat_fwl_1)).subtract(self.X2.multiply(self.beta_hat_fwl_2))
+        if self.X1.nrows > (self.X1.ncols + self.X2.ncols):
+            self.s_squared = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X1.nrows - self.X1.ncols - self.X2.ncols).data[0][0]
+            self.var_hat_1 = self.X1TM2X1_inverse.scale(self.s_squared)
+            self.var_hat_2 = self.X2TM1X2_inverse.scale(self.s_squared)
+        else:
+            raise ValueError("Please supply data which has more rows than columns, otherwise inference will not be possible.")
+        return {"Beta_hat_FWL_1": self.beta_hat_fwl_1, "Beta_hat_FWL_2": self.beta_hat_fwl_2}
+
     def restricted_ols(self, R, c, F_test = False):
         self.J = len(R)
         if len(R[0]) != self.X.ncols or self.J != len(c):
@@ -140,27 +176,59 @@ class Regression:
             self.p_value = self.Chi_2.test(self.test_stat)
         return {"Beta_star": self.beta_star, "p-value": self.p_value}
 
-    def partitioned_ols(self):
-        if not self.partition:
-            return self.ols()
-        self.X1T = self.X1.transpose()
-        self.X2T = self.X2.transpose()
-        self.M1 = Matrix.identity_matrix(self.X1.nrows).subtract(self.X1.multiply((self.X1T.multiply(self.X1)).inverse()).multiply(self.X1T))
-        self.M2 = Matrix.identity_matrix(self.X2.nrows).subtract(self.X2.multiply((self.X2T.multiply(self.X2)).inverse()).multiply(self.X2T))
-        self.X1TM2 = self.X1T.multiply(self.M2)
-        self.X2TM1 = self.X2T.multiply(self.M1)
-        self.X1TM2X1_inverse = (self.X1TM2.multiply(self.X1)).inverse()
-        self.X2TM1X2_inverse = (self.X2TM1.multiply(self.X2)).inverse()
-        self.beta_hat_fwl_1 = self.X1TM2X1_inverse.multiply(self.X1TM2).multiply(self.y)
-        self.beta_hat_fwl_2 = self.X2TM1X2_inverse.multiply(self.X2TM1).multiply(self.y)
-        self.e_hat = self.y.subtract(self.X1.multiply(self.beta_hat_fwl_1)).subtract(self.X2.multiply(self.beta_hat_fwl_2))
-        if self.X1.nrows > (self.X1.ncols + self.X2.ncols):
-            self.s_squared = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X1.nrows - self.X1.ncols - self.X2.ncols).data[0][0]
-            self.var_hat_1 = self.X1TM2X1_inverse.scale(self.s_squared)
-            self.var_hat_2 = self.X2TM1X2_inverse.scale(self.s_squared)
+    def gls_AR1(self):
+        if not self.beta_hat_ols:
+            self.ols()
+        if self.partition:
+            return self.partition_ols()
+        rho_hat = self.AR_test(1)["Beta_hat_AR"].data[0][0]
+        data = []
+        for i in range(self.X.nrows):
+            data.append([])
+            for j in range(self.X.nrows):
+                distance = j - i
+                if distance < 0:
+                    distance *= -1
+                data[i][j].append((rho_hat ** distance) / (1 + rho_hat ** 2))
+        self.Omega_hat = Matrix(data)
+        self.Omega_hat_inverse = self.Omega_hat.inverse()
+        self.XT = self.X.transpose()
+        self.XTOmega_hat_inverse = self.XT.multiply(self.Omega_hat_inverse)
+        self.XTOmega_hat_inverseX_inverse = self.XTOmega_hat_inverse.multiply(self.X).inverse()
+        self.beta_hat_ols = self.XTOmega_hat_inverseX_inverse.multiply(self.XTOmega_hat_inverse.multiply(self.y))
+        self.e_hat = self.y.subtract(self.X.multiply(self.beta_hat_ols))
+        if self.X.nrows > self.X.ncols:
+            self.s_squared = (self.e_hat.transpose().multiply(self.e_hat)).scale(self.X.nrows - self.X.ncols).data[0][0]
+            self.var_hat = self.XTX_inverse.scale(self.s_squared)
         else:
-            raise ValueError("Please supply data which has more rows than columns, otherwise inference will not be possible.")
-        return {"Beta_hat_FWL_1": self.beta_hat_fwl_1, "Beta_hat_FWL_2": self.beta_hat_fwl_2}
+            raise ValueError(
+                "Please supply data which has more rows than columns, otherwise inference will not be possible.")
+        return {"Beta_hat_GLS": self.beta_hat_ols}
+
+    def iv(self):
+        if not self.Z:
+            return self.ols()
+        if self.Z.ncols < self.X.ncols:
+            raise ValueError("The instrument matrix that you have provided is underidentified.")
+        if self.Z.ncols > self.X.ncols:
+            self.ZT = self.Z.transpose()
+            self.ZTX_inverse = (self.ZT.multiply(self.Z)).inverse()
+            self.Z = self.Z.multiply(self.ZTX_inverse).multiply(self.ZT.multiply(self.X))
+        elif self.Z.nrows != self.X.nrows:
+            raise ValueError("Your instrument matrix has more observations than your regular data matrix.")
+        self.ZT = self.Z.transpose()
+        self.ZTX = self.ZT.multiply(self.X)
+        self.ZTX_inverse = self.ZTX.inverse()
+        self.beta_hat_iv = self.ZTX_inverse.multiply(self.ZT.multiply(self.y))
+        self.e_hat_iv = self.y.subtract(self.X.multiply(self.beta_hat_iv))
+        if self.X.nrows > self.X.ncols:
+            self.s_squared_iv = (self.e_hat_iv.transpose().multiply(self.e_hat_iv)).scale(self.X.nrows - self.X.ncols).data[0][0]
+            self.var_hat_iv = self.ZTX_inverse.multiply(self.Z.multiply(self.ZT.multiply(self.ZTX_inverse.transpose()))).scale(self.s_squared_iv)
+        else:
+            raise ValueError(
+                "Please supply data which has more rows than columns, otherwise inference will not be possible.")
+        return {"Beta_hat_IV": self.beta_hat_iv}
+
 
     def wald_heteroskedasticity_test(self, exponential=False):
         data = self.e_hat.data
@@ -179,6 +247,8 @@ class Regression:
         return {"Beta_hat_WALD": wald.beta_hat_ols.data, "p-value": result["p-value"]}
 
     def breush_pagan_heteroskedasticity_test(self):
+        if not self.e_hat:
+            self.ols()
         data = self.e_hat.data
         average = 0
         for i in range(len(data)):
@@ -197,6 +267,8 @@ class Regression:
         return p_value
 
     def white_heteroskedasticity_test(self):
+        if not self.e_hat:
+            self.ols()
         data = self.e_hat.data
         for i in range(len(data)):
             result = data[i][0] ** 2
@@ -210,6 +282,8 @@ class Regression:
         return p_value
 
     def AR_test(self, lag=1):
+        if not self.e_hat:
+            self.ols()
         data = self.e_hat.data
         for i in range(len(data) - lag):
             for j in range(lag):
