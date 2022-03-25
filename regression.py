@@ -1,9 +1,10 @@
 from matrix import Matrix
 from hypothesis_testing import t, Z, ChiSquared, F
+from math import log
 
 # Options to functions
 class Regression:
-    def __init__(self, data, header=True, partition=None, restriction=False):
+    def __init__(self, data, header=True, partition=None, restriction=False, intercept=True):
         self.partition = partition
 
         self.y = []
@@ -33,7 +34,7 @@ class Regression:
             self.beta_star = None
             self.test_stat = None
 
-            self.F = F()
+            self.F = None
             self.p_value = None
 
         if partition:
@@ -68,9 +69,15 @@ class Regression:
             else:
                 self.y.append([])
                 if not partition:
-                    self.X.append([])
+                    if intercept:
+                        self.X.append([1])
+                    else:
+                        self.X.append([])
                 else:
-                    self.X1.append([])
+                    if intercept:
+                        self.X1.append([1])
+                    else:
+                        self.X1.append([])
                     self.X2.append([])
                 for j in range(self.ncols):
                     if j == 0:
@@ -106,7 +113,7 @@ class Regression:
             raise ValueError("Please supply data which has more rows than columns, otherwise inference will not be possible.")
         return {"Beta_hat_OLS": self.beta_hat_ols}
 
-    def restricted_ols(self, R, c):
+    def restricted_ols(self, R, c, F_test = False):
         self.J = len(R)
         if len(R[0]) != self.X.ncols or self.J != len(c):
             raise ValueError("Please supply a valid restriction matrix and constant vector.")
@@ -120,11 +127,17 @@ class Regression:
         self.D = self.XTX_inverseRT.multiply(self.RXTX_inverseRT_inverse.multiply((self.R.multiply(self.beta_hat_ols)).subtract(self.c)))
         self.XD = self.X.multiply(self.D)
         self.XDT = self.XD.transpose()
-        self.e_hatTe_hat = self.s_squared.scale(self.X.nrows - self.X.ncols)
-        self.dTRXTX_inverseRT_inversed = self.e_hatTe_hat.add(self.XDT.multiply(self.XD))
+        self.e_hatTe_hat = self.s_squared * (self.X.nrows - self.X.ncols)
+        self.dTRXTX_inverseRT_inversed = self.e_hatTe_hat + (self.XDT.multiply(self.XD)).data[0][0]
         self.beta_star = self.beta_hat_ols.subtract(self.D)
-        self.test_stat = self.dTRXTX_inverseRT_inversed.scale((self.X.nrows - self.X.ncols) / (self.J * self.e_hatTe_hat.data[0][0]))
-        self.p_value = self.F.test(self.test_stat)
+        if F_test:
+            self.test_stat = self.dTRXTX_inverseRT_inversed * ((self.X.nrows - self.X.ncols) / (self.J * self.e_hatTe_hat))
+            self.F = F(self.J, self.X.nrows - self.beta_hat_ols.nrows)
+            self.p_value = self.F.test(self.test_stat)
+        else:
+            self.test_stat = self.dTRXTX_inverseRT_inversed / self.J
+            self.Chi_2 = ChiSquared(self.J)
+            self.p_value = self.Chi_2.test(self.test_stat)
         return {"Beta_star": self.beta_star, "p-value": self.p_value}
 
     def partitioned_ols(self):
@@ -148,6 +161,28 @@ class Regression:
         else:
             raise ValueError("Please supply data which has more rows than columns, otherwise inference will not be possible.")
         return {"Beta_hat_FWL_1": self.beta_hat_fwl_1, "Beta_hat_FWL_2": self.beta_hat_fwl_2}
+
+    def wald_heteroskedasticity_test(self, exponential=False):
+        data = self.e_hat.data
+        c = []
+        for i in range(len(data)):
+            data[i][0] *= data[i][0]
+            if exponential:
+                data[i][0] = log(data[i][0])
+            data[i] += self.X.data[i]
+        R = Matrix.identity_matrix(self.ncols - 1).data
+        for i in range(len(R)):
+            c.append([0])
+            R[i].insert(0, 0)
+        wald = Regression(data, restriction=True, intercept=False)
+        result = wald.restricted_ols(R, c)
+        return {"Beta_hat_WALD": wald.beta_hat_ols.data, "p-value": result["p-value"]}
+
+    def breusch_pagan_heteroskedasticity_test(self):
+        pass
+
+    def white_heteroskedasticity_test(self):
+        pass
 
     def t_test(self, beta_hat, var_hat, degrees_of_freedom, mu_0=0):
         if not (self.beta_hat_ols or self.beta_hat_fwl_1 or self.beta_hat_fwl_2):
