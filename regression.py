@@ -169,7 +169,7 @@ class Regression:
             data[i][0] *= data[i][0]
             if exponential:
                 data[i][0] = log(data[i][0])
-            data[i] += self.X.data[i]
+            data[i] += self.combinations(self.X.data[i])
         R = Matrix.identity_matrix(self.ncols - 1).data
         for i in range(len(R)):
             c.append([0])
@@ -178,11 +178,36 @@ class Regression:
         result = wald.restricted_ols(R, c)
         return {"Beta_hat_WALD": wald.beta_hat_ols.data, "p-value": result["p-value"]}
 
-    def breusch_pagan_heteroskedasticity_test(self):
-        pass
+    def breush_pagan_heteroskedasticity_test(self):
+        data = self.e_hat.data
+        average = 0
+        for i in range(len(data)):
+            result = data[i][0] ** 2
+            data[i][0] = result
+            average += result
+        average = average / len(data)
+        for i in range(len(data)):
+            data[i][0] = data[i][0] / average
+            data[i] += self.combinations(self.X.data[i])
+        breush_pagan = Regression(data, restriction=True)
+        breush_pagan.ols()
+        nR_squared = breush_pagan.s_squared
+        Chi_2 = ChiSquared(self.X.ncols - 1)
+        p_value = Chi_2.test(nR_squared)
+        return p_value
 
     def white_heteroskedasticity_test(self):
-        pass
+        data = self.e_hat.data
+        for i in range(len(data)):
+            result = data[i][0] ** 2
+            data[i][0] = result
+            data[i] += self.combinations(self.X.data[i])
+        white = Regression(data, restriction=True)
+        white.ols()
+        nR_squared = white.s_squared
+        Chi_2 = ChiSquared(self.X.ncols - 1)
+        p_value = Chi_2.test(nR_squared)
+        return p_value
 
     def t_test(self, beta_hat, var_hat, degrees_of_freedom, mu_0=0):
         if not (self.beta_hat_ols or self.beta_hat_fwl_1 or self.beta_hat_fwl_2):
@@ -203,3 +228,7 @@ class Regression:
         for i in range(len(beta_hat)):
             p_values.append(standard_normal.test((beta_hat[i] - mu_0) / var_hat_data[i][i] ** (1 / 2)) * 2)
         return {"p-values": p_values}
+
+    @staticmethod
+    def combinations(X):
+       return X
