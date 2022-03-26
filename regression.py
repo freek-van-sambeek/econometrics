@@ -229,7 +229,6 @@ class Regression:
                 "Please supply data which has more rows than columns, otherwise inference will not be possible.")
         return {"Beta_hat_IV": self.beta_hat_iv}
 
-
     def wald_heteroskedasticity_test(self, exponential=False):
         data = self.e_hat.data
         c = []
@@ -299,6 +298,11 @@ class Regression:
         result = AR.restricted_ols(R, c, F_test=True)
         return {"Beta_hat_AR": AR.beta_hat_ols.data, "p-value": result["p-value"]}
 
+    def likelihood_ratio_test(self, logL_U, logL_R, nrestrictions):
+        Chi_2 = ChiSquared(nrestrictions)
+        test_statistic = 2 * (logL_U - logL_R)
+        return {"p-value": Chi_2.test(test_statistic)}
+
     def t_test(self, beta_hat, var_hat, degrees_of_freedom, mu_0=0):
         if not (self.beta_hat_ols or self.beta_hat_fwl_1 or self.beta_hat_fwl_2):
             self.ols()
@@ -321,4 +325,10 @@ class Regression:
 
     @staticmethod
     def combinations(X):
-       return X
+        nparams = len(X[0]) - 1
+        nrows = len(X)
+        for i in range(nparams):
+            for j in range(nrows):
+                for k in range(i, nparams):
+                    X[j].append(X[j][i] * X[j][k])
+        return X

@@ -9,21 +9,21 @@ import statsmodels.formula.api as sm
 import timeit
 
 
-# test_statistic = 0.920
-# t = hypothesis_testing.t(degrees_freedom=5)
-# print(t.test(test_statistic))
-#
-# test_statistic = 1.96
-# Z = hypothesis_testing.Z()
-# print(Z.test(test_statistic))
+test_statistic = 0.920
+t = hypothesis_testing.t(degrees_freedom=5)
+print(t.test(test_statistic))
 
-# test_statistic = 9.24
-# Chi_squared = hypothesis_testing.ChiSquared(degrees_freedom=5)
-# print(Chi_squared.test(test_statistic))
+test_statistic = 1.96
+Z = hypothesis_testing.Z()
+print(Z.test(test_statistic))
 
-# test_statistic = 3.63
-# F = hypothesis_testing.F(degrees_freedom1=2, degrees_freedom2=16)
-# print(F.test(test_statistic))
+test_statistic = 9.24
+Chi_squared = hypothesis_testing.ChiSquared(degrees_freedom=5)
+print(Chi_squared.test(test_statistic))
+
+test_statistic = 3.63
+F = hypothesis_testing.F(degrees_freedom1=2, degrees_freedom2=16)
+print(F.test(test_statistic))
 
 path = "/Users/martin/Downloads/Econometrics/Housing.csv"
 data = []
@@ -38,7 +38,7 @@ model = Regression(data, header=True)
 print(model.ols()["Beta_hat_OLS"].data)
 stop = timeit.default_timer()
 print("Own ran in: ", stop - start)
-wald = model.wald_heteroskedasticity_test()
+wald = model.wald_heteroskedasticity_test(exponential=True)
 print(wald["p-value"])
 print(wald["Beta_hat_WALD"])
 
